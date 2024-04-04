@@ -8,6 +8,12 @@ predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
 def length(p1, p2):
     return hypot(p1[0] - p2[0], p1[1] - p2[1])
 
+def boundingRect(eyeLandmarks):
+    xs = list(map(lambda eyeLandmark: eyeLandmark[0], eyeLandmarks))
+    ys = list(map(lambda eyeLandmark: eyeLandmark[1], eyeLandmarks))
+    
+    return ((min(xs), min(ys)), (max(xs), max(ys)))
+    
 
 def averagePoints(p1, p2):
     return (
@@ -18,46 +24,54 @@ def averagePoints(p1, p2):
 
 def getEyePoints(gray, face):
     landmarks = predictor(gray, face)
+    
+    
     points = []
     for i in range(36, 48):
         x = landmarks.part(i).x
         y = landmarks.part(i).y
         points.append((x, y))
+
     return points
 
+
+def getLidRatio(eyeLandmarks):
+    cv2.polylines(frame, [np.array(eyeLandmarks)], isClosed=True, color=(170, 255, 34), thickness = 1)
+    
+    eyeHorizontalP1, eyeHorizontalP2 = eyeLandmarks[0], eyeLandmarks[3]
+    eyeVerticalP1, eyeVerticalP2 = (
+        averagePoints(eyeLandmarks[1], eyeLandmarks[2]),
+        averagePoints(eyeLandmarks[4], eyeLandmarks[5]),
+    )
+    eyeRatio = length(eyeHorizontalP1, eyeHorizontalP2) / length(
+        eyeVerticalP1, eyeVerticalP2
+    )
+    
+    cv2.line(frame, eyeHorizontalP1, eyeHorizontalP2, (170, 255, 34), 1)
+    cv2.line(frame, eyeVerticalP1, eyeVerticalP2, (170, 255, 34), 1)
+
+    return eyeRatio
 
 def drawEye(eyePoints):
     leftEye = eyePoints[:6]
     rightEye = eyePoints[6:]
+        
+    boundingLeft = boundingRect(leftEye)
+    boundingRight = boundingRect(rightEye)
+    
+    leftWindow = frame[boundingLeft[0][1]:boundingLeft[1][1], boundingLeft[0][0]:boundingLeft[1][0]]
+    rightWindow = frame[boundingRight[0][1]:boundingRight[1][1], boundingRight[0][0]:boundingRight[1][0]]
+    cv2.imshow("left", leftWindow)
+    cv2.imshow("right", rightWindow)
+    
+    cv2.rectangle(frame, *boundingRect(leftEye), (170, 255, 34), 1)
+    cv2.rectangle(frame, *boundingRect(rightEye), (170, 255, 34), 1)
+    
+    leftEyeRatio = getLidRatio(leftEye)
+    rightEyeRatio = getLidRatio(rightEye)
 
-    leftHorizontalP1, leftHorizontalP2 = leftEye[0], leftEye[3]
-    rightHorizontalP1, rightHorizontalP2 = rightEye[0], rightEye[3]
-
-    leftVerticalP1, leftVerticalP2 = (
-        averagePoints(leftEye[1], leftEye[2]),
-        averagePoints(leftEye[4], leftEye[5]),
-    )
-
-    rightVerticalP1, rightVerticalP2 = (
-        averagePoints(rightEye[1], rightEye[2]),
-        averagePoints(rightEye[4], rightEye[5]),
-    )
-
-    # print(leftVerticalP1, leftVerticalP2)
-
-    leftRatio = length(leftHorizontalP1, leftHorizontalP2) / length(
-        leftVerticalP1, leftVerticalP2
-    )
-    rightRatio = length(rightHorizontalP1, rightHorizontalP2) / length(
-        rightVerticalP1, rightVerticalP2
-    )
-
-    diff = leftRatio - rightRatio
-    # global yay
-    # print(yay, diff, end=" ")
-    # yay += 1
-    print(diff)
-    avgRatio = (leftRatio + rightRatio) / 2
+    diff = leftEyeRatio - rightEyeRatio
+    avgRatio = (leftEyeRatio + rightEyeRatio) / 2
     if avgRatio > 4.75:
         print("neutral")
     else:
@@ -68,13 +82,8 @@ def drawEye(eyePoints):
         else:
             print("front")
     
-        
-
-    cv2.line(frame, leftHorizontalP1, leftHorizontalP2, (170, 255, 34), 1)
-    cv2.line(frame, rightHorizontalP1, rightHorizontalP2, (170, 255, 34), 1)
-
-    cv2.line(frame, leftVerticalP1, leftVerticalP2, (170, 255, 34), 1)
-    cv2.line(frame, rightVerticalP1, rightVerticalP2, (170, 255, 34), 1)
+    # cv2.line(frame, leftVerticalP1, leftVerticalP2, (170, 255, 34), 1)
+    # cv2.line(frame, rightVerticalP1, rightVerticalP2, (170, 255, 34), 1)
 
 
 cap = cv2.VideoCapture(1)
@@ -100,7 +109,7 @@ while True:
         drawEye(eyePoints)
         # for landmark in eyePoints:
         #     cv2.circle(frame, (x, y), 2, (170, 255, 34), 2)
-
+    frame = cv2.flip(frame, 1)
     cv2.imshow("frame", frame)
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
